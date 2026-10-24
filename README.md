@@ -1,5 +1,7 @@
 # Misskey Spreadsheet Mode
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-Support_Manafield-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/manafield)
+
 Misskey 계열 프런트엔드에 메뉴 버튼으로 진입하는 시트 UI를 추가하는 소스 모듈입니다.
 
 - 홈·로컬·소셜·글로벌·알림 시트, 수동 갱신과 조회 캐시
