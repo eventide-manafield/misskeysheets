@@ -7,6 +7,14 @@ A host maintainer copies the module, adapts the host integration, and rebuilds t
 
 License: AGPL-3.0-only; retain the included COPYING and SPDX notices. No Manafield service, OAuth client, account integration or new backend/schema is required.
 
+## CLI installer
+
+Run `sh install.sh "/path/to/host"` on Linux/macOS or `install.bat "C:\path to\host"` from Windows Command Prompt. Node.js 22+ and Git are required. Both launch the same dependency-free Node CLI. `--check` previews without writing; the default prompts before applying; `--yes` explicitly skips confirmation. Omitting the path prompts in an interactive terminal.
+
+The host must be a clean Git source checkout. The CLI checks patch compatibility, file collisions, symlink destinations and the locale-loader shape before writing. It integrates module sources, the reference patch and translations. Unsupported forks stop for manual porting. Originals and a `manifest.json` identifying newly created files are backed up under the host Git metadata directory (`sheet-install-*`); the path is printed. Failed installation restores original file contents and removes created files; empty directories may remain. After success, review `git diff`. To undo, restore existing files from that backup and remove only new files listed in the manifest, preserving any subsequent edits first.
+
+The CLI does not install dependencies, generate locale types, build, restart services or deploy. Complete the host checks, build and browser verification below yourself.
+
 ## Package layout
 
 - `src/index.ts`: public entry (`SheetModule`, `SheetHost` types).

@@ -22,7 +22,7 @@
     "README.md"
   ],
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run && node --test test/installer.test.mjs",
     "typecheck": "vue-tsc --noEmit",
     "build": "vite build",
     "sync:host": "node scripts/sync-host.mjs",

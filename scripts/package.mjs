@@ -15,7 +15,7 @@ const temp = await mkdtemp(join(tmpdir(), 'sheet-repository-'));
 try {
 	const kit = join(temp, 'misskey-spreadsheet-mode');
 	await mkdir(kit);
-	for (const name of ['src', 'adapters', 'integration', 'docs', 'test', 'scripts', 'package.json', 'tsconfig.json', 'vite.config.ts', 'vitest.config.ts', 'README.md', 'COPYING', 'AGENTS.md', '.gitignore']) {
+	for (const name of ['src', 'adapters', 'integration', 'docs', 'test', 'scripts', 'package.json', 'tsconfig.json', 'vite.config.ts', 'vitest.config.ts', 'README.md', 'install.sh', 'install.bat', 'COPYING', 'AGENTS.md', '.gitignore']) {
 		await cp(join(root, name), join(kit, name), { recursive: true });
 	}
 	await mkdir(dirname(output), { recursive: true });
