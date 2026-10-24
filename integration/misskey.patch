@@ -1,0 +1,291 @@
+diff --git a/locales/ja-JP.yml b/locales/ja-JP.yml
+index 3a67d347c..b2430094c 100644
+--- a/locales/ja-JP.yml
++++ b/locales/ja-JP.yml
+@@ -3593,3 +3593,19 @@ _noctemblithLogin:
+   localAdminUnavailable: "このサーバーではローカル管理者専用ログインを利用できません。"
+   privilegedUnavailable: "この権限を持つアカウントではManafieldログインを完了できません。サーバー管理者にお問い合わせください。"
+   unlinkedAccount: "同じハンドルの既存アカウントがあります。アカウントの所有権確認とManafieldへの連携について、サーバー管理者にお問い合わせください。"
++
++_sheetMode:
++  title: "シートモード"
++  displayMode: "UI表示モード: シート"
++  description: "オンにするとシート、オフにすると通常のUIを表示します。アカウントごとに保存されます。"
++  normal: "通常モードに戻る"
++  settings: "シートモードの設定"
++  manualRefresh: "手動更新"
++  updatedAt: "最終取得"
++  compact: "簡易エディター"
++  fullComposer: "すべての投稿オプション"
++  discard: "編集中のエディターを閉じますか？未送信の内容は下書きに保存されます。"
++  readState: "既読状態"
++  read: "既読"
++  muted: "ミュートされたノートを表示"
++  collapse: "折りたたむ"
+diff --git a/packages/frontend/src/boot/main-boot.ts b/packages/frontend/src/boot/main-boot.ts
+index d79085ae6..f7743eea5 100644
+--- a/packages/frontend/src/boot/main-boot.ts
++++ b/packages/frontend/src/boot/main-boot.ts
+@@ -58,7 +58,9 @@ export async function mainBoot() {
+ 				break;
+ 		}
+ 
+-		return createApp(rootComponent);
++		const normalLayout = rootComponent;
++		const sheetShell = await import('@/ui/sheet.vue').then(x => x.default);
++		return createApp(sheetShell, { normalLayout });
+ 	});
+ 
+ 	reactionPicker.init();
+diff --git a/packages/frontend/src/components/MkPostForm.vue b/packages/frontend/src/components/MkPostForm.vue
+index d4bf04895..77ed9959a 100644
+--- a/packages/frontend/src/components/MkPostForm.vue
++++ b/packages/frontend/src/components/MkPostForm.vue
+@@ -14,7 +14,7 @@ SPDX-License-Identifier: AGPL-3.0-only
+ 	<header :class="$style.header">
+ 		<div :class="$style.headerLeft">
+ 			<button v-if="!fixed" :class="$style.cancel" class="_button" @click="cancel"><i class="ti ti-x"></i></button>
+-			<button ref="accountMenuEl" v-click-anime v-tooltip="i18n.ts.account" class="_button" @click="openAccountMenu">
++			<button v-if="!sheet" ref="accountMenuEl" v-click-anime v-tooltip="i18n.ts.account" class="_button" @click="openAccountMenu">
+ 				<img :class="$style.avatar" :src="(postAccount ?? $i).avatarUrl" style="border-radius: 100%;"/>
+ 			</button>
+ 		</div>
+@@ -47,8 +47,8 @@ SPDX-License-Identifier: AGPL-3.0-only
+ 			</button>
+ 		</div>
+ 	</header>
+-	<MkNoteSimple v-if="replyTargetNote" :class="$style.targetNote" :note="replyTargetNote"/>
+-	<MkNoteSimple v-if="renoteTargetNote" :class="$style.targetNote" :note="renoteTargetNote"/>
++	<MkNoteSimple v-if="replyTargetNote && !sheet" :class="$style.targetNote" :note="replyTargetNote"/>
++	<MkNoteSimple v-if="renoteTargetNote && !sheet" :class="$style.targetNote" :note="renoteTargetNote"/>
+ 	<div v-if="quoteId" :class="$style.withQuote"><i class="ti ti-quote"></i> {{ i18n.ts.quoteAttached }}<button @click="quoteId = null; renoteTargetNote = null;"><i class="ti ti-x"></i></button></div>
+ 	<div v-if="visibility === 'specified'" :class="$style.toSpecified">
+ 		<span style="margin-right: 8px;">{{ i18n.ts.recipient }}</span>
+@@ -60,7 +60,7 @@ SPDX-License-Identifier: AGPL-3.0-only
+ 			<button class="_buttonPrimary" style="padding: 4px; border-radius: 8px;" @click="addVisibleUser"><i class="ti ti-plus ti-fw"></i></button>
+ 		</div>
+ 	</div>
+-	<MkInfo v-if="!store.r.tips.value.postForm" :class="$style.showHowToUse" closable @close="closeTip('postForm')">
++	<MkInfo v-if="!sheet && !store.r.tips.value.postForm" :class="$style.showHowToUse" closable @close="closeTip('postForm')">
+ 		<button class="_textButton" @click="showTour">{{ i18n.ts._postForm.showHowToUse }}</button>
+ 	</MkInfo>
+ 	<MkInfo v-if="scheduledAt != null" :class="$style.scheduledAt">
+@@ -92,7 +92,7 @@ SPDX-License-Identifier: AGPL-3.0-only
+ 	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :user="postAccount ?? $i"/>
+ 	<div v-if="showingOptions" style="padding: 8px 16px;">
+ 	</div>
+-	<footer ref="footerEl" :class="$style.footer">
++	<footer v-show="!compact" ref="footerEl" :class="$style.footer">
+ 		<div :class="$style.footerLeft">
+ 			<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.upload + ')'" class="_button" :class="$style.footerButton" @click="chooseFileFromPc"><i class="ti ti-photo-plus"></i></button>
+ 			<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.fromDrive + ')'" class="_button" :class="$style.footerButton" @click="chooseFileFromDrive"><i class="ti ti-cloud-download"></i></button>
+@@ -158,10 +158,13 @@ import { checkDragDataType, getDragData } from '@/drag-and-drop.js';
+ import { useUploader } from '@/composables/use-uploader.js';
+ import { startTour } from '@/utility/tour.js';
+ import { closeTip } from '@/tips.js';
++import { createSheetSubmission } from '@/ui/sheet/submission.js';
+ 
+ const $i = ensureSignin();
+ 
+ const props = withDefaults(defineProps<PostFormProps & {
++	sheet?: boolean;
++	compact?: boolean;
+ 	fixed?: boolean;
+ 	autofocus?: boolean;
+ 	freezeAfterPosted?: boolean;
+@@ -245,7 +248,8 @@ uploader.events.on('itemUploaded', ctx => {
+ });
+ 
+ const draftKey = computed((): string => {
+-	let key = targetChannel.value ? `channel:${targetChannel.value.id}` : '';
++	let key = props.sheet ? `sheet:${$i.id}:` : '';
++	key += targetChannel.value ? `channel:${targetChannel.value.id}` : '';
+ 
+ 	if (renoteTargetNote.value) {
+ 		key += `renote:${renoteTargetNote.value.id}`;
+@@ -723,7 +727,10 @@ function clear() {
+ }
+ 
+ function onKeydown(ev: KeyboardEvent) {
+-	if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey) && canPost.value) post();
++	if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey) && canPost.value && (!props.sheet || (!ev.isComposing && !justEndedComposition.value))) {
++		if (props.sheet) ev.preventDefault();
++		post();
++	}
+ 
+ 	// justEndedComposition.value is for Safari, which keyDown occurs after compositionend.
+ 	// ev.isComposing is for another browsers.
+@@ -952,7 +959,18 @@ async function uploadFiles() {
+ 	}
+ }
+ 
++const sheetSubmission = createSheetSubmission();
++
+ async function post(ev?: PointerEvent) {
++	if (props.sheet) {
++		if (!canPost.value) return;
++		await sheetSubmission.run(() => performPost(ev));
++		return;
++	}
++	await performPost(ev);
++}
++
++async function performPost(ev?: PointerEvent) {
+ 	if (ev != null) {
+ 		const el = (ev.currentTarget ?? ev.target) as HTMLElement | null;
+ 
+@@ -1077,7 +1095,7 @@ async function post(ev?: PointerEvent) {
+ 	}
+ 
+ 	posting.value = true;
+-	misskeyApi('notes/create', postData, token).then((res) => {
++	await misskeyApi('notes/create', postData, token).then((res) => {
+ 		if (props.freezeAfterPosted) {
+ 			posted.value = true;
+ 		} else {
+@@ -1501,6 +1519,13 @@ async function canClose() {
+ 
+ defineExpose({
+ 	clear,
++	isPosting: () => posting.value || sheetSubmission.pending,
++	seedSheetText: (seed: string) => {
++		if (props.sheet) {
++			text.value += seed;
++			focus();
++		}
++	},
+ 	abortUploader: () => uploader.abortAll(),
+ 	canClose,
+ });
+diff --git a/packages/frontend/src/composables/use-note.ts b/packages/frontend/src/composables/use-note.ts
+index 64eaac686..c586d0318 100644
+--- a/packages/frontend/src/composables/use-note.ts
++++ b/packages/frontend/src/composables/use-note.ts
+@@ -57,6 +57,7 @@ export interface UseNoteElements {
+ 
+ export interface UseNoteOptions {
+ 	inTimeline?: boolean;
++	manualRefresh?: boolean;
+ 	tl_withSensitive?: Ref<boolean>;
+ 	inChannel?: ExtractInjectedType<typeof DIType['inChannel']>;
+ 	currentClip?: Ref<Misskey.entities.Clip | null> | null;
+@@ -139,7 +140,7 @@ export function useNote(
+ 	const { $note: $appearNote, subscribe: subscribeManuallyToNoteCapture } = useNoteCapture({
+ 		note: appearNote,
+ 		parentNote: rawNote,
+-		mock: props.mock,
++		mock: props.mock || options.manualRefresh,
+ 	});
+ 
+ 	// 各種フラグ状態
+diff --git a/packages/frontend/src/navbar.ts b/packages/frontend/src/navbar.ts
+index c5b77c498..da0cd4756 100644
+--- a/packages/frontend/src/navbar.ts
++++ b/packages/frontend/src/navbar.ts
+@@ -26,6 +26,12 @@ export const navbarItemDef = reactive<{
+ 		action?: (ev: PointerEvent) => void;
+ 	};
+ }>({
++	sheetMode: {
++		title: i18n.ts._sheetMode.title,
++		icon: 'ti ti-table',
++		show: computed(() => $i != null),
++		to: '/sheet',
++	},
+ 	notifications: {
+ 		title: i18n.ts.notifications,
+ 		icon: 'ti ti-bell',
+diff --git a/packages/frontend/src/pages/settings/preferences.vue b/packages/frontend/src/pages/settings/preferences.vue
+index b2773f1e9..c292190ca 100644
+--- a/packages/frontend/src/pages/settings/preferences.vue
++++ b/packages/frontend/src/pages/settings/preferences.vue
+@@ -6,6 +6,10 @@ SPDX-License-Identifier: AGPL-3.0-only
+ <template>
+ <SearchMarker path="/settings/preferences" :label="i18n.ts.preferences" :keywords="['general', 'preferences']" icon="ti ti-adjustments">
+ 	<div class="_gaps_m">
++		<MkSwitch v-model="sheetMode">
++			<template #label>{{ i18n.ts._sheetMode.displayMode }}</template>
++			<template #caption>{{ i18n.ts._sheetMode.description }}</template>
++		</MkSwitch>
+ 		<MkFeatureBanner icon="/fluent-emoji/2699.png" color="#00ff9d">
+ 			<SearchText>{{ i18n.ts._settings.preferencesBanner }}</SearchText>
+ 		</MkFeatureBanner>
+@@ -947,6 +951,7 @@ const chatSendOnEnter = prefer.model('chat.sendOnEnter');
+ const useStickyIcons = prefer.model('useStickyIcons');
+ const enableHighQualityImagePlaceholders = prefer.model('enableHighQualityImagePlaceholders');
+ const reduceAnimation = prefer.model('animation', v => !v, v => !v);
++const sheetMode = prefer.model('sheetMode');
+ const animatedMfm = prefer.model('animatedMfm');
+ const disableShowingAnimatedImages = prefer.model('disableShowingAnimatedImages');
+ const keepScreenOn = prefer.model('keepScreenOn');
+diff --git a/packages/frontend/src/pages/timeline.vue b/packages/frontend/src/pages/timeline.vue
+index 64c2b2eee..f5d11b776 100644
+--- a/packages/frontend/src/pages/timeline.vue
++++ b/packages/frontend/src/pages/timeline.vue
+@@ -5,6 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
+ 
+ <template>
+ <PageWithHeader v-model:tab="src" :actions="headerActions" :tabs="$i ? headerTabs : headerTabsWhenNotLogin" :swipable="true" :displayMyAvatar="true" :canOmitTitle="true">
++	<div v-if="$i" :class="$style.modeSwitch"><button class="_textButton" @click="prefer.commit('sheetMode', true)"><i class="ti ti-table"></i> {{ i18n.ts._sheetMode.title }}</button></div>
+ 	<div class="_spacer" style="--MI_SPACER-w: 800px;">
+ 		<MkTip v-if="isBasicTimeline(src)" :k="`tl.${src}`" style="margin-bottom: var(--MI-margin);">
+ 			{{ i18n.ts._timelineDescription[src] }}
+@@ -305,6 +306,8 @@ definePage(() => ({
+ </script>
+ 
+ <style lang="scss" module>
++.modeSwitch { padding: 8px 16px; }
++
+ .new {
+ 	position: sticky;
+ 	top: calc(var(--MI-stickyTop, 0px) + 16px);
+diff --git a/packages/frontend/src/preferences/def.ts b/packages/frontend/src/preferences/def.ts
+index 9b71690e8..4c1e68914 100644
+--- a/packages/frontend/src/preferences/def.ts
++++ b/packages/frontend/src/preferences/def.ts
+@@ -57,6 +57,10 @@ type OmitStrict<T, K extends keyof T> = T extends any ? Pick<T, Exclude<keyof T,
+ // NOTE: デフォルト値は他の設定の状態に依存してはならない(依存していた場合、ユーザーがその設定項目単体で「初期値にリセット」した場合不具合の原因になる)
+ 
+ export const PREF_DEF = definePreferences({
++	sheetMode: {
++		accountDependent: true,
++		default: false,
++	},
+ 	accounts: {
+ 		default: [] as [host: string, user: {
+ 			id: string;
+@@ -188,6 +192,7 @@ export const PREF_DEF = definePreferences({
+ 	menu: {
+ 		default: [
+ 			'notifications',
++			'sheetMode',
+ 			'clips',
+ 			'drive',
+ 			'followRequests',
+diff --git a/packages/frontend/src/router.definition.ts b/packages/frontend/src/router.definition.ts
+index 6d13a139e..07f2dad37 100644
+--- a/packages/frontend/src/router.definition.ts
++++ b/packages/frontend/src/router.definition.ts
+@@ -34,3 +34,8 @@ export const ROUTE_DEF = [{
++}, {
++	name: 'spreadsheet',
++	path: '/sheet',
++	component: page(() => import('@/pages/sheet.vue')),
++	loginRequired: true,
+ }, {
+ 	path: '/timeline',
+ 	component: PageTimeline,
+diff --git a/packages/frontend/src/ui/_common_/navbar.vue b/packages/frontend/src/ui/_common_/navbar.vue
+index 8b860d89f..4bc89cfe9 100644
+--- a/packages/frontend/src/ui/_common_/navbar.vue
++++ b/packages/frontend/src/ui/_common_/navbar.vue
+@@ -22,6 +22,9 @@ SPDX-License-Identifier: AGPL-3.0-only
+ 			<MkA v-tooltip.noDelay.right="i18n.ts.timeline" :class="$style.item" :activeClass="$style.active" to="/" exact>
+ 				<i :class="$style.itemIcon" class="ti ti-home ti-fw" style="view-transition-name: navbar-homeIcon;"></i><span :class="$style.itemText">{{ i18n.ts.timeline }}</span>
+ 			</MkA>
++			<MkA v-if="$i && !prefer.r.menu.value.includes('sheetMode')" v-tooltip.noDelay.right="navbarItemDef.sheetMode.title" :class="$style.item" :activeClass="$style.active" to="/sheet">
++				<i :class="$style.itemIcon" class="ti ti-table ti-fw"></i><span :class="$style.itemText">{{ navbarItemDef.sheetMode.title }}</span>
++			</MkA>
+ 			<template v-for="item in prefer.r.menu.value">
+ 				<div v-if="item === '-'" :class="$style.divider"></div>
+ 				<component
